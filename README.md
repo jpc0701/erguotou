@@ -3,5 +3,6 @@
 # 后端
 - 由于后端逻辑比较简单，只有几个查询和修改接口，用纯servlet编写，纯javaWeb项目，没有用到spring和maven。后续可能会加上。
 - 数据库用的是mybaits
+- 登录功能尚未实现
 # 前端
 - vue + iview + echarts

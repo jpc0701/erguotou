@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dao.RecordMapper">
+    <!-- 新增的Statement
+       id：唯一标识，随便写，在同一个命名空间下保持唯一，使用动态代理之后要求和方法名保持一致
+       parameterType：参数的类型，使用动态代理之后和方法的参数类型一致
+       useGeneratedKeys:开启主键回写
+       keyColumn：指定数据库的主键
+       keyProperty：主键对应的pojo属性名
+     -->
+    <select id="slectRecordsByLimit" flushCache="true" resultType="pojo.Record">
+        SELECT * FROM new_condition ORDER BY createtime DESC LIMIT #{limit};
+    </select>
+    <select id="slectRecordsByDate" flushCache="true" resultType="pojo.Record">
+        SELECT * FROM new_condition where createtime between #{startDate} and #{endDate} ORDER BY createtime DESC;
+    </select>
+</mapper>

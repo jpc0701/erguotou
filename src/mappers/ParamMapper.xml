@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dao.ParamMapper">
+    <select id="selectParamByKey" flushCache="true" resultType="pojo.Param">
+        select * from parameter where `key` = #{key}
+    </select>
+    <update id="updateParam" parameterType="pojo.Param">
+    	update parameter set `value` = #{value} where `key` = #{key}
+    </update>
+</mapper>

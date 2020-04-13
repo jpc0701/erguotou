@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+    <meta charset="utf-8">
+    <title>实时数据展示</title>
+	<script src="http://v1.vuejs.org/js/vue.js"></script>
+    <link rel="stylesheet" type="text/css" href="http://unpkg.zhimg.com/iview/dist/styles/iview.css">
+    <script type="text/javascript" src="http://unpkg.zhimg.com/iview@1.0.1/dist/iview.js"></script>
+    <script src="https://cdn.staticfile.org/echarts/4.3.0/echarts.min.js"></script>
+	<script src="https://unpkg.zhimg.com/axios/dist/axios.min.js"></script>
+	<script src="customed.js"></script>
+<style scoped>
+</style>
+</head>
+<body style="height: 100%;">
+	<div id="app" style="width: 100%;height: 100%;background-color: rgba(1, 1, 2, 0.85);">
+		<Menu mode="horizontal">
+			<Row style="background-color: rgba(1, 1, 2, 0.85);">
+				<i-col span="2">
+					<h2>历史数据展示</h2>
+				</i-col>
+				<i-col span="4">
+					<Date-picker type="datetimerange" confirm @on-change="updateStartAndEndTime" @on-ok="getDataByTime" size="small" format="yyyy-MM-dd HH:mm" placeholder="选择时间范围" style="width: 90%"></Date-picker>
+				</i-col>
+				<i-col span="4">
+					<Switch @on-change="autoSwitch" :checked="isAuto" size="large" style="margin-right: 5px;">
+						<span slot="open">开启</span>
+						<span slot="close">关闭</span>
+					</Switch>
+					<span style="padding-top: 2px;">自动刷新24h数据</span>
+				</i-col>
+				<i-col span="3">
+					<div style="width: 100%;height: 100%;display: flex;">
+						<div style="width: 70px;">当前余额：</div>
+						<div v-show="!isWaiting" style="width: 50px;height: 60px;"><font style="font-size: 22px;" :color="statusColor">{{ balance }}</font></div>
+						<div v-show="isWaiting">
+							<Spin fix style="width: 50px;background-color: rgba(0, 0, 0, 0);margin-left: 60px;margin-top: 4px;"></Spin>
+						</div>
+					</div>
+				</i-col>
+				<i-col span="3">
+					<div style="width: 100%;height: 100%;display: flex;">
+						<div style="width: 70px;">当前指数：</div>
+						<div v-show="!isWaiting" style="width: 50px;height: 60px;"><font style="font-size: 22px;" :color="statusColor">{{ index }}</font></div>
+						<div v-show="isWaiting">
+							<Spin fix style="width: 50px;background-color: rgba(0, 0, 0, 0);margin-left: 60px;margin-top: 4px;"></Spin>
+						</div>
+					</div>
+				</i-col>
+				<i-col span="3">
+					<div style="width: 100%;height: 100%;display: flex;">
+						<div style="width: 70px;">上期下注：</div>
+						<div v-show="!isWaiting" style="width: 50px;height: 60px;"><font style="font-size: 22px;" color="gray">{{ price }}</font></div>
+						<div v-show="isWaiting">
+							<Spin fix style="width: 50px;background-color: rgba(0, 0, 0, 0);margin-left: 60px;margin-top: 4px;"></Spin>
+						</div>
+					</div>
+				</i-col>
+				<i-col span="3">
+					<div style="width: 100%;height: 100%;display: flex;">
+						<div style="width: 70px;">上期盈利：</div>
+						<div v-show="!isWaiting" style="width: 50px;height: 60px;"><font style="font-size: 22px;" :color="statusColor">{{ profit }}</font></div>
+						<div v-show="isWaiting">
+							<Spin fix style="width: 50px;background-color: rgba(0, 0, 0, 0);margin-left: 60px;margin-top: 4px;"></Spin>
+						</div>
+					</div>
+				</i-col>
+				<i-col span="2">
+					<i-button type="info" :closable="isShow" size="small" @click="openParams">查看相关参数</i-button>
+				</i-col>
+			</Row>
+		</Menu>
+		
+		<div style="width: 100%;height: 94%;">
+			<div id="main" style="width: 100%;height: 100%;"></div>
+		</div>
+		<Modal :visible.sync="isShow">
+			<div slot="header" style="text-align:center">
+				<font style="font-size: 20px;margin-left: 28px;">参数列表</font>
+				<div style="float: right;"><a href="#" @click="getParams">刷新</a></div>
+			</div>
+			<i-table :content="self" v-show="!isWaiting1" :columns="columns" :data="params"></i-table>
+			<Spin v-show="isWaiting1" size="large" fix></Spin>
+			<div slot="footer"></div>
+		</Modal>
+		<Modal :visible.sync="isShow1" width="200" @on-ok="modify" :loading="isLoading" title="参数修改">
+			<p>key: {{ modifyParam.key }}</p>
+			<p>value: <i-input size="small" :value.sync="modifyParam.value" style="width: 100px;"></i-input></p>
+			<p>type: {{ modifyParam.type }}</p>
+		</Modal>
+	</div>
+
+<script>
+	var myTable = new Vue({
+		data: {
+			
+		},
+		methods: {
+			openUpdateParam: function(index) {
+				app.openUpdateParam(index);
+			}
+		}
+	});
+	var app = new Vue({
+		el:'#app',
+		data:{
+			//最新数据相关变量
+			balance: 0,
+			index: 0,
+			price: 0,
+			profit:0,
+			isWaiting: true,
+			statusColor: "gray",
+			//查询相关变量
+			startTime: "",
+			endTime: "",
+			isAuto: true,
+			//图表相关变量
+			dataZoomStart: 50,
+			dataZoomEnd: 100,
+			//参数相关
+			isShow: false,
+			columns: [
+				{title: "参数", key: "key", width: 150, align: 'center'},
+				{title: "值", key: "value", width: 130, align: 'center'},
+				{title: "类型", key: "type", width: 110, align: 'center'},
+				{title: "操作", key: "operate", width: 100, align: 'center', 
+                        render: (row, column, index) => {
+                            return '<i-button type="primary" size="small" @click="openUpdateParam(' + index + ')">编辑</i-button>';
+                        }}
+			],
+			params: [],
+			isWaiting1: false,
+			isShow1: false,
+			self: myTable,
+			modifyParam: {},
+			isLoading: true
+		},
+		methods:{
+			//修改参数
+			modify: function() {
+				var temp = this.modifyParam.key + "-" + this.modifyParam.value + "-" + this.modifyParam.type;
+				var that = this;
+				axios.get('/erguotou/param?param=' + temp).then(function (response) {
+					that.isShow1 = false;
+					this.getParams();
+				}).catch(function (error) {
+					console.log(error);
+				});
+			},
+			//打开参数修改
+			openUpdateParam: function(index){
+				this.isShow1 = true;
+				this.modifyParam = this.params[index];
+			},
+			//打开参数列表
+			openParams: function() {
+				this.isShow = true;
+				this.getParams();
+			},
+			//初始化
+			init: function() {
+				this.update24hData();
+				this.updateLstestStatus();
+				setInterval(this.update24hData, 10000);
+				setInterval(this.updateLstestStatus, 10000);
+			},
+			//自动刷新24h数据开关
+			autoSwitch: function(status) {
+				this.isAuto = status;
+				if(this.isAuto) {
+					this.update24hData();
+				}
+			},
+			//更新最新投注情况
+			updateLstestStatus: function() {
+				this.isWaiting = true;
+				var that = this;
+				axios.get('/erguotou/getLastestRecord').then(function (response) {
+					that.balance = response.data.data.balance;
+					that.index = response.data.data.index;
+					that.price = response.data.data.price;
+					that.profit = response.data.data.profit;
+					that.isWaiting = false;
+					if(that.price === 0) {
+						that.statusColor = "gray";
+					}else {
+						if(that.profit > 0) {
+							that.statusColor = "red";
+						} else if(that.profit < 0) {
+							that.statusColor = "green";
+						} else {
+							that.statusColor = "gray";
+						}
+					}
+				}).catch(function (error) {
+					console.log(error);
+				});
+			},
+			//刷新24小时内的数据
+			update24hData: function() {
+				if(this.isAuto) {
+					this.$Loading.start();
+					var that = this;
+					axios.get('/erguotou/getLastestRecord?type=1').then(function (response) {
+						that.draw(response);
+						that.$Loading.finish()
+					}).catch(function (error) {
+						console.log(error);
+						that.$Loading.error()
+					});
+				}
+			},
+			//获取指定时间范围的数据
+			getDataByTime() {
+				this.$Loading.start();
+				this.isAuto = false;
+				var that = this;
+				axios.get('/erguotou/getLastestRecord?startDate=' + this.startTime + '&endDate=' + this.endTime).then(function (response) {
+					that.draw(response);
+					that.$Loading.finish()
+				}).catch(function (error) {
+					console.log(error);
+					that.$Loading.error()
+				});
+			},
+			//获取相关参数；列表
+			getParams: function() {
+				this.isWaiting1 = true;
+				var that = this;
+				axios.get('/erguotou/param').then(function (response) {
+					that.params = response.data.data;
+					that.isWaiting1 = false;
+				}).catch(function (error) {
+					console.log(error);
+				});
+			},
+			//画图
+			draw: function(response) {
+				var index = [];
+				var createtime = [];
+				var balance = [];
+				var profit = [];
+				var loss = [];
+				for(var i = response.data.data.length - 1; i >= 0 ; i --){
+					index.push(response.data.data[i].index);
+					createtime.push(formatDate(response.data.data[i].createtime));
+					balance.push(response.data.data[i].balance);
+					if (response.data.data[i].profit >= 0) {
+						profit.push(response.data.data[i].profit);
+						loss.push('-');
+					} else {
+						loss.push(response.data.data[i].profit);
+						profit.push('-');
+					}
+				}
+				myChart.setOption({
+					legend: {
+						data:['指数','余额','盈利', "亏损"]
+					},
+					dataZoom: {
+						type: 'slider',
+						start: this.dataZoomStart,
+						end: this.dataZoomEnd,
+						xAxisIndex: [0, 1],
+					},
+					grid: [
+						{bottom: '27%'},
+						{top: '75%', bottom: '12%'}
+					],
+					yAxis: [
+						{name: '指数', gridIndex: 0, type: 'value', min:'dataMin', max:'dataMax'},
+						{name: '余额', gridIndex: 0, type: 'value', min:'dataMin', max:'dataMax'},
+						{gridIndex: 1, type: 'value', min:'dataMin', max:'dataMax'},
+						{gridIndex: 1, type: 'value', min:'dataMin', max:'dataMax'}
+					],
+					xAxis: [
+						{data: createtime, gridIndex: 0, nameLocation: 'middle', axisLabel: {rotate: 45}, show: false},
+						{data: createtime, gridIndex: 1, nameLocation: 'middle', axisLabel: {rotate: 45}}
+					],
+					series: [
+						{name: '指数', type: 'line', data: index, yAxisIndex: 0, xAxisIndex: 0},
+						{name: '余额', type: 'line', data: balance, yAxisIndex: 1, xAxisIndex: 0},
+						{name: '盈利', type: 'bar', stack: 'one', data: profit, yAxisIndex: 3, xAxisIndex: 1},
+						{name: '亏损', type: 'bar', stack: 'one',data: loss, yAxisIndex: 3, xAxisIndex: 1}
+					]
+				});
+			},
+			//更新时间选择器的开始和结束时间
+			updateStartAndEndTime: function(date) {
+				var temp = date.split(" - ");
+				this.startTime = temp[0];
+				this.endTime = temp[1];
+			}
+		}
+	});
+	
+	// 基于准备好的dom，初始化echarts实例
+	var myChart = echarts.init(document.getElementById('main'),'customed');
+	
+	myChart.on('datazoom', function (params) {
+		app.dataZoomStart = params.start;
+		app.dataZoomEnd = params.end;
+	});
+	
+	//时间戳转换方法    date:时间戳数字
+	function formatDate(date) {
+		var date = new Date(date);
+		var YY = date.getFullYear() + '-';
+		var MM = (date.getMonth() + 1 < 10 ? '0' + (date.getMonth() + 1) : date.getMonth() + 1) + '-';
+		var DD = (date.getDate() < 10 ? '0' + (date.getDate()) : date.getDate());
+		var hh = (date.getHours() < 10 ? '0' + date.getHours() : date.getHours()) + ':';
+		var mm = (date.getMinutes() < 10 ? '0' + date.getMinutes() : date.getMinutes()) + ':';
+		var ss = (date.getSeconds() < 10 ? '0' + date.getSeconds() : date.getSeconds());
+		return MM + DD +" "+hh + mm;
+	}
+	
+	function timerTask() {
+		app.init();
+	}
+	
+	window.onload = timerTask;
+</script>
+</body>
+</html>
